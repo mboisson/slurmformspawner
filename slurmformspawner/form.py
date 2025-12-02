@@ -116,6 +116,15 @@ class SbatchForm(Configurable):
         help="Define the list of available slurm partitions."
     ).tag(config=True)
 
+    feature = SelectWidget(
+        {
+            'lock' : True,
+            'def' : '',
+            'choices' : lambda api, user: api.get_features()
+        },
+        help="Define the list of available slurm features."
+    ).tag(config=True)
+
     form_template_path = Unicode(
         os.path.join(sys.prefix, 'share', 'slurmformspawner', 'templates', 'form.html'),
         help="Path to the Jinja2 template of the form"
@@ -133,7 +142,8 @@ class SbatchForm(Configurable):
             'profile' : SelectField('Job profile', validators=[AnyOf([])]),
             'oversubscribe' : BooleanField('Enable core oversubscription?'),
             'reservation' : SelectField("Reservation", validators=[AnyOf([])]),
-            'partition' : SelectField("Partition", validators=[AnyOf([])])
+            'partition' : SelectField("Partition", validators=[AnyOf([])]),
+            'feature' : SelectField("Feature", validators=[AnyOf([])])
         }
         self.form = BaseForm(fields)
         self.form['runtime'].filters = [float]
@@ -203,6 +213,7 @@ class SbatchForm(Configurable):
         self.config_reservations()
         self.config_account()
         self.config_partition()
+        self.config_feature()
         return Template(self.template).render(form=self.form, bootstrap_version=self.bootstrap_version, profile_params=self.profile_args)
 
     def config_runtime(self):
@@ -374,6 +385,23 @@ class SbatchForm(Configurable):
 
         if lock:
             self.form['partition'].render_kw = {'disabled': 'disabled'}
+
+    def config_feature(self):
+        choices = self.resolve(self.feature.get('choices'))
+        lock = self.resolve(self.feature.get('lock'))
+        def_ = self.resolve(self.feature.get('def'))
+
+        # Since Python 3.6, the standard dict type maintains insertion order by default.
+        # The first choice is default selected by WTForms.
+        feature_choice_map = {def_: def_}
+        for feature in choices:
+            feature_choice_map[feature] = feature
+
+        self.form['feature'].choices = list(feature_choice_map.items())
+        self.form['feature'].validators[-1].values = [key for key, value in self.form['feature'].choices]
+
+        if lock:
+            self.form['feature'].render_kw = {'disabled': 'disabled'}
 
     def config_reservations(self):
         choices = self.resolve(self.reservation.get('choices'))

@@ -81,6 +81,14 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
         <small id="overs_help" class="form-text text-muted">Recommended for interactive usage</small>
     </div>
 </div>
+<div class="row">
+    <div class="col">
+        <div class="form-group {{field_cls}}">
+            {{ form.feature.label }}
+            {{ form.feature(class_="form-control") }}
+        </div>
+    </div>
+</div>
 <div class="form-group">
     {{ form.gpus.label }}
     {{ form.gpus(class_="form-control") }}
