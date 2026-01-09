@@ -18,7 +18,7 @@ from wtforms.fields.html5 import IntegerField
 from wtforms.widgets import html_params
 from wtforms.widgets.html5 import NumberInput
 
-from . traitlets import NumericRangeWidget, SelectWidget
+from .traitlets import NumericRangeWidget, SelectWidget, LockableWidget
 
 def select_multi_checkbox(field, **kwargs):
     kwargs.setdefault('type', 'checkbox')
@@ -78,7 +78,7 @@ class SbatchForm(Configurable):
         help="Define parameters of core numeric range widget"
     ).tag(config=True)
 
-    oversubscribe = Dict({'def' : False, 'lock' : True}).tag(config=True)
+    oversubscribe = LockableWidget({'def' : False, 'lock' : True}).tag(config=True)
 
     gpus = SelectWidget(
         {
