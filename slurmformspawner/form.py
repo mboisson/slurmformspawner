@@ -416,32 +416,29 @@ class SbatchForm(Configurable):
             self.form['feature'].render_kw = {'disabled': 'disabled'}
 
     def validate_features(self, form, field):
-        feature_sets = self.slurm_api.get_node_info()['features']
-        incompat = []
+        selected_features = set(field.data)
         # No feature constraints have been selected
-        if len(field.data) == 0:
+        if len(selected_features) == 0:
             return
+        active_features = set(self.resolve(self.feature.get('choices')))
+        feature_sets = self.slurm_api.get_node_info()['features']
+        if not active_features.issuperset(selected_features):
+            raise Exception('Some of the features selected are not available in any node.')
+
+        unselect = set()
         for feature_set in feature_sets:
-            data = set(field.data)
-            if feature_set.issuperset(data):
+            if feature_set.issuperset(selected_features):
                 return
-            incompat.append((data.intersection(feature_set), data.difference(feature_set)))
+            unselect.add(frozenset(selected_features.difference(feature_set)))
 
-        errors = []
-        html_errors = ["<ul>"]
-        skip = set()
-        for issue in incompat:
-            for lhs in issue[0]:
-                for rhs in issue[1]:
-                    if {lhs, rhs} not in skip:
-                        errors.append(f'Feature "{lhs}" cannot be used together with "{rhs}".')
-                        html_errors.append(f'<li>Feature <b>{lhs}</b> cannot be used together with <b>{rhs}</b>.</li>')
-                        skip.add(frozenset({lhs, rhs}))
-
-        excp = Exception(" ".join(errors))
-        html_errors.append("</ul>")
-        excp.jupyterhub_html_message = "\n".join(html_errors)
-        raise excp
+        # No node can satisfy all selected features; report a single clear error
+        feature_list = ", ".join(sorted(selected_features))
+        unselect_list = ", ".join(["[%s]" % ", ".join(sorted(combo)) for combo in sorted(unselect)])
+        message = (
+            f'The selected feature combination [{feature_list}] cannot be satisfied by any single node. '
+            f'Unselect one of the following set of features: {unselect_list}.'
+        )
+        raise Exception(message)
 
     def config_reservations(self):
         choices = self.resolve(self.reservation.get('choices'))
