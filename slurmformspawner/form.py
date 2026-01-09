@@ -156,7 +156,7 @@ class SbatchForm(Configurable):
             'memory'  : IntegerField('Memory (MB)',  validators=[InputRequired(), NumberRange()], widget=NumberInput()),
             'gpus'    : SelectField('GPU configuration', validators=[AnyOf([])]),
             'profile' : SelectField('Job profile', validators=[AnyOf([])]),
-            'oversubscribe' : BooleanField('Enable core oversubscription?'),
+            'oversubscribe' : BooleanField('Enable core oversubscription', description="Recommended for interactive usage"),
             'reservation' : SelectField("Reservation", validators=[AnyOf([])]),
             'partition' : SelectField("Partition", validators=[AnyOf([])]),
             'feature' : SelectMultipleField("Feature constraints", validators=[self.validate_features], widget=select_multi_checkbox)

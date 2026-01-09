@@ -66,22 +66,14 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
             {{ form.nprocs.label(class_="col-form-label") }}
             {{ form.nprocs(class_="form-control") }}
         </div>
-    </div>
-    <div class="col">
-        <div class="form-group {{field_cls}}">
-            {{ form.memory.label }}
-            {{ form.memory(class_="form-control") }}
+        <div class="form-check">
+            {{ form.oversubscribe(class_="form-check-input") }}
+            {{ form.oversubscribe.label(class_="form-check-label") }}
+            <span data-toggle="tooltip" data-placement="top" title="{{ form.oversubscribe.description }}">
+                <i class="fa fa-question-circle"></i>
+            </span>
         </div>
     </div>
-</div>
-<div class="form-group">
-    <div class="form-check">
-        {{ form.oversubscribe(class_="form-check-input") }}
-        {{ form.oversubscribe.label(class_="form-check-label") }}
-        <small id="overs_help" class="form-text text-muted">Recommended for interactive usage</small>
-    </div>
-</div>
-<div class="row">
     <div class="col">
         <div class="form-group {{field_cls}}">
             {{ form.memory.label(class_="col-form-label") }}
