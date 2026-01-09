@@ -391,14 +391,15 @@ class SbatchForm(Configurable):
         lock = self.resolve(self.partition.get('lock'))
         def_ = self.resolve(self.partition.get('def'))
 
-        # Since Python 3.6, the standard dict type maintains insertion order by default.
-        # The first choice is default selected by WTForms.
-        partition_choice_map = {def_: def_}
-        for partition in choices:
-            partition_choice_map[partition] = partition
+        if def_ != '':
+            try:
+                choices.remove(def_)
+            except ValueError:
+                raise Exception(f'The partition default value is not a valid choice.')
+        choices.insert(0, def_)
 
-        self.form['partition'].choices = list(partition_choice_map.items())
-        self.form['partition'].validators[-1].values = [key for key, value in self.form['partition'].choices]
+        self.form['partition'].choices = list(zip(choices, choices))
+        self.form['partition'].validators[-1].values = choices
 
         if lock:
             self.form['partition'].render_kw = {'disabled': 'disabled'}
