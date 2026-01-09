@@ -28,20 +28,20 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
 </script>
 
 <div class="form-group">
-    {{ form.profile.label }}
+    {{ form.profile.label(class_="col-form-label") }}
     {{ form.profile(class_="form-control", onChange="onChange();") }}
 </div>
 {% endif -%}
 <div class="row">
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.reservation.label }}
+            {{ form.reservation.label(class_="col-form-label") }}
             {{ form.reservation(class_="form-control") }}
         </div>
     </div>
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.partition.label }}
+            {{ form.partition.label(class_="col-form-label") }}
             {{ form.partition(class_="form-control") }}
         </div>
     </div>
@@ -49,13 +49,13 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
 <div class="row">
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.account.label }}
+            {{ form.account.label(class_="col-form-label") }}
             {{ form.account(class_="form-control") }}
         </div>
     </div>
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.runtime.label }}
+            {{ form.runtime.label(class_="col-form-label") }}
             {{ form.runtime(class_="form-control") }}
         </div>
     </div>
@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
 <div class="row">
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.nprocs.label }}
+            {{ form.nprocs.label(class_="col-form-label") }}
             {{ form.nprocs(class_="form-control") }}
         </div>
     </div>
@@ -84,16 +84,24 @@ document.addEventListener("DOMContentLoaded", function() {onChange();});
 <div class="row">
     <div class="col">
         <div class="form-group {{field_cls}}">
-            {{ form.feature.label }}
-            {{ form.feature(class_="form-control") }}
+            {{ form.memory.label(class_="col-form-label") }}
+            {{ form.memory(class_="form-control") }}
         </div>
     </div>
 </div>
 <div class="form-group">
-    {{ form.gpus.label }}
+    {{ form.gpus.label(class_="col-form-label") }}
     {{ form.gpus(class_="form-control") }}
 </div>
 <div class="form-group">
-    {{ form.ui.label }}
+    {{ form.ui.label(class_="col-form-label") }}
     {{ form.ui(class_="form-control") }}
 </div>
+{% if form.feature.choices %}
+<div class="form-group">
+    <fieldset>
+    <legend class="col-form-label">{{ form.feature.label.text }}</legend>
+    {{ form.feature() }}
+    </fieldset>
+</div>
+{% endif %}

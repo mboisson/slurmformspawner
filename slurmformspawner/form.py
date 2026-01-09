@@ -9,15 +9,31 @@ from packaging.version import parse as parse_version
 from jinja2 import Template
 
 from traitlets.config.configurable import Configurable
-from traitlets import Unicode, Dict, Unicode
+from traitlets import Unicode
 
-from wtforms import BooleanField, DecimalField, SelectField
+from wtforms import BooleanField, DecimalField, SelectField, SelectMultipleField
 from wtforms.form import BaseForm
 from wtforms.validators import InputRequired, NumberRange, AnyOf
 from wtforms.fields.html5 import IntegerField
+from wtforms.widgets import html_params
 from wtforms.widgets.html5 import NumberInput
 
 from . traitlets import NumericRangeWidget, SelectWidget
+
+def select_multi_checkbox(field, **kwargs):
+    kwargs.setdefault('type', 'checkbox')
+    field_id = kwargs.pop('id', field.id)
+    html = []
+    for value, label, checked in field.iter_choices():
+        choice_id = f"{field_id}-{value}"
+        options = dict(kwargs, name=field.name, value=value, id=choice_id)
+        if checked:
+            options['checked'] = 'checked'
+        html.append('<div class="form-check form-check-inline">')
+        html.append(f'<input class="form-check-input" {html_params(**options)} /> ')
+        html.append(f'<label class="form-check-label" for="{choice_id}">{label}</label>')
+        html.append("</div>")
+    return "".join(html)
 
 class FakeMultiDict(dict):
     getlist = dict.__getitem__
@@ -118,8 +134,8 @@ class SbatchForm(Configurable):
 
     feature = SelectWidget(
         {
-            'lock' : True,
-            'def' : '',
+            'lock' : False,
+            'def' : [],
             'choices' : lambda api, user: api.get_features()
         },
         help="Define the list of available slurm features."
@@ -143,11 +159,12 @@ class SbatchForm(Configurable):
             'oversubscribe' : BooleanField('Enable core oversubscription?'),
             'reservation' : SelectField("Reservation", validators=[AnyOf([])]),
             'partition' : SelectField("Partition", validators=[AnyOf([])]),
-            'feature' : SelectField("Feature", validators=[AnyOf([])])
+            'feature' : SelectMultipleField("Feature constraints", validators=[self.validate_features], widget=select_multi_checkbox)
         }
         self.form = BaseForm(fields)
         self.form['runtime'].filters = [float]
-        self.resolve = partial(resolve, api=slurm_api, user=username)
+        self.slurm_api = slurm_api
+        self.resolve = partial(resolve, api=self.slurm_api, user=username)
         self.ui_args = ui_args
 
         # retrieve defaults from config
@@ -370,7 +387,7 @@ class SbatchForm(Configurable):
             self.form['ui'].render_kw = {'disabled': 'disabled'}
 
     def config_partition(self):
-        choices = self.resolve(self.partition.get('choices'))
+        choices = list(self.resolve(self.partition.get('choices')))
         lock = self.resolve(self.partition.get('lock'))
         def_ = self.resolve(self.partition.get('def'))
 
@@ -391,17 +408,39 @@ class SbatchForm(Configurable):
         lock = self.resolve(self.feature.get('lock'))
         def_ = self.resolve(self.feature.get('def'))
 
-        # Since Python 3.6, the standard dict type maintains insertion order by default.
-        # The first choice is default selected by WTForms.
-        feature_choice_map = {def_: def_}
-        for feature in choices:
-            feature_choice_map[feature] = feature
-
-        self.form['feature'].choices = list(feature_choice_map.items())
-        self.form['feature'].validators[-1].values = [key for key, value in self.form['feature'].choices]
+        self.form['feature'].choices = list(zip(choices, choices))
+        self.form['feature'].data = def_
 
         if lock:
             self.form['feature'].render_kw = {'disabled': 'disabled'}
+
+    def validate_features(self, form, field):
+        feature_sets = self.slurm_api.get_node_info()['features']
+        incompat = []
+        # No feature constraints have been selected
+        if len(field.data) == 0:
+            return
+        for feature_set in feature_sets:
+            data = set(field.data)
+            if feature_set.issuperset(data):
+                return
+            incompat.append((data.intersection(feature_set), data.difference(feature_set)))
+
+        errors = []
+        html_errors = ["<ul>"]
+        skip = set()
+        for issue in incompat:
+            for lhs in issue[0]:
+                for rhs in issue[1]:
+                    if {lhs, rhs} not in skip:
+                        errors.append(f'Feature "{lhs}" cannot be used together with "{rhs}".')
+                        html_errors.append(f'<li>Feature <b>{lhs}</b> cannot be used together with <b>{rhs}</b>.</li>')
+                        skip.add(frozenset({lhs, rhs}))
+
+        excp = Exception(" ".join(errors))
+        html_errors.append("</ul>")
+        excp.jupyterhub_html_message = "\n".join(html_errors)
+        raise excp
 
     def config_reservations(self):
         choices = self.resolve(self.reservation.get('choices'))

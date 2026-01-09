@@ -11,7 +11,7 @@
 {% if reservation %}#SBATCH --reservation={{reservation}}{% endif %}
 #SBATCH --gres={{gpus}}
 {% if partition != "" %}#SBATCH --partition={{partition}}{% endif %}
-{% if feature != "" %}#SBATCH --constraint={{feature}}{% endif %}
+{% if constraint != "" %}#SBATCH --constraint={{constraint}}{% endif %}
 unset XDG_RUNTIME_DIR
 
 # Disable variable export with sbatch

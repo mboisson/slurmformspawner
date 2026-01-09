@@ -21,7 +21,7 @@ class SlurmAPI(SingletonConfigurable):
 
     @cachedmethod(attrgetter('info_cache'))
     def get_node_info(self):
-        output = {'cpu': [], 'mem': [], 'gres': [], 'partitions': [], 'features': []}
+        output = {'cpu': [], 'mem': [], 'gres': [], 'partitions': [], 'features': set()}
         try:
             controls = check_output(['scontrol', '-o', 'show', 'node'], encoding='utf-8')
         except CalledProcessError:
@@ -40,7 +40,8 @@ class SlurmAPI(SingletonConfigurable):
                 if 'Partitions' in node and node['Partitions']:
                     output['partitions'].extend(node['Partitions'].split(","))
                 if 'ActiveFeatures' in node and node['ActiveFeatures']:
-                    output['features'].extend(node['ActiveFeatures'].split(","))
+                    output['features'].add(frozenset(node['ActiveFeatures'].split(",")))
+            output['features'].discard(frozenset(['(null)']))
         return output
 
     def is_online(self):
@@ -65,7 +66,8 @@ class SlurmAPI(SingletonConfigurable):
         return sorted(partitions)
 
     def get_features(self):
-        features = set(self.get_node_info()['features'])
+        feature_sets = self.get_node_info()['features']
+        features = {feature for feature_set in feature_sets for feature in feature_set}
         return sorted(features)
 
     @cachedmethod(attrgetter('acct_cache'))
