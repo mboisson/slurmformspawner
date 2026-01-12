@@ -9,15 +9,31 @@ from packaging.version import parse as parse_version
 from jinja2 import Template
 
 from traitlets.config.configurable import Configurable
-from traitlets import Unicode, Dict, Unicode
+from traitlets import Unicode
 
-from wtforms import BooleanField, DecimalField, SelectField
+from wtforms import BooleanField, DecimalField, SelectField, SelectMultipleField
 from wtforms.form import BaseForm
 from wtforms.validators import InputRequired, NumberRange, AnyOf
 from wtforms.fields.html5 import IntegerField
+from wtforms.widgets import html_params
 from wtforms.widgets.html5 import NumberInput
 
-from . traitlets import NumericRangeWidget, SelectWidget
+from .traitlets import NumericRangeWidget, SelectWidget, LockableWidget
+
+def select_multi_checkbox(field, **kwargs):
+    kwargs.setdefault('type', 'checkbox')
+    field_id = kwargs.pop('id', field.id)
+    html = []
+    for value, label, checked in field.iter_choices():
+        choice_id = f"{field_id}-{value}"
+        options = dict(kwargs, name=field.name, value=value, id=choice_id)
+        if checked:
+            options['checked'] = 'checked'
+        html.append('<div class="form-check form-check-inline">')
+        html.append(f'<input class="form-check-input" {html_params(**options)} /> ')
+        html.append(f'<label class="form-check-label" for="{choice_id}">{label}</label>')
+        html.append("</div>")
+    return "".join(html)
 
 class FakeMultiDict(dict):
     getlist = dict.__getitem__
@@ -62,7 +78,7 @@ class SbatchForm(Configurable):
         help="Define parameters of core numeric range widget"
     ).tag(config=True)
 
-    oversubscribe = Dict({'def' : False, 'lock' : True}).tag(config=True)
+    oversubscribe = LockableWidget({'def' : False, 'lock' : True}).tag(config=True)
 
     gpus = SelectWidget(
         {
@@ -116,6 +132,15 @@ class SbatchForm(Configurable):
         help="Define the list of available slurm partitions."
     ).tag(config=True)
 
+    feature = SelectWidget(
+        {
+            'lock' : False,
+            'def' : [],
+            'choices' : lambda api, user: api.get_features()
+        },
+        help="Define the list of available slurm features."
+    ).tag(config=True)
+
     form_template_path = Unicode(
         os.path.join(sys.prefix, 'share', 'slurmformspawner', 'templates', 'form.html'),
         help="Path to the Jinja2 template of the form"
@@ -131,13 +156,15 @@ class SbatchForm(Configurable):
             'memory'  : IntegerField('Memory (MB)',  validators=[InputRequired(), NumberRange()], widget=NumberInput()),
             'gpus'    : SelectField('GPU configuration', validators=[AnyOf([])]),
             'profile' : SelectField('Job profile', validators=[AnyOf([])]),
-            'oversubscribe' : BooleanField('Enable core oversubscription?'),
+            'oversubscribe' : BooleanField('Enable core oversubscription', description="Recommended for interactive usage"),
             'reservation' : SelectField("Reservation", validators=[AnyOf([])]),
-            'partition' : SelectField("Partition", validators=[AnyOf([])])
+            'partition' : SelectField("Partition", validators=[AnyOf([])]),
+            'feature' : SelectMultipleField("Feature constraints", validators=[self.validate_features], widget=select_multi_checkbox)
         }
         self.form = BaseForm(fields)
         self.form['runtime'].filters = [float]
-        self.resolve = partial(resolve, api=slurm_api, user=username)
+        self.slurm_api = slurm_api
+        self.resolve = partial(resolve, api=self.slurm_api, user=username)
         self.ui_args = ui_args
 
         # retrieve defaults from config
@@ -203,6 +230,7 @@ class SbatchForm(Configurable):
         self.config_reservations()
         self.config_account()
         self.config_partition()
+        self.config_feature()
         return Template(self.template).render(form=self.form, bootstrap_version=self.bootstrap_version, profile_params=self.profile_args)
 
     def config_runtime(self):
@@ -359,21 +387,58 @@ class SbatchForm(Configurable):
             self.form['ui'].render_kw = {'disabled': 'disabled'}
 
     def config_partition(self):
-        choices = self.resolve(self.partition.get('choices'))
+        choices = list(self.resolve(self.partition.get('choices')))
         lock = self.resolve(self.partition.get('lock'))
         def_ = self.resolve(self.partition.get('def'))
 
-        # Since Python 3.6, the standard dict type maintains insertion order by default.
-        # The first choice is default selected by WTForms.
-        partition_choice_map = {def_: def_}
-        for partition in choices:
-            partition_choice_map[partition] = partition
+        if def_ != '':
+            try:
+                choices.remove(def_)
+            except ValueError:
+                raise Exception(f'The partition default value is not a valid choice.')
+        choices.insert(0, def_)
 
-        self.form['partition'].choices = list(partition_choice_map.items())
-        self.form['partition'].validators[-1].values = [key for key, value in self.form['partition'].choices]
+        self.form['partition'].choices = list(zip(choices, choices))
+        self.form['partition'].validators[-1].values = choices
 
         if lock:
             self.form['partition'].render_kw = {'disabled': 'disabled'}
+
+    def config_feature(self):
+        choices = self.resolve(self.feature.get('choices'))
+        lock = self.resolve(self.feature.get('lock'))
+        def_ = self.resolve(self.feature.get('def'))
+
+        self.form['feature'].choices = list(zip(choices, choices))
+        self.form['feature'].data = def_
+
+        if lock:
+            self.form['feature'].render_kw = {'disabled': 'disabled'}
+
+    def validate_features(self, form, field):
+        selected_features = set(field.data)
+        # No feature constraints have been selected
+        if len(selected_features) == 0:
+            return
+        active_features = set(self.resolve(self.feature.get('choices')))
+        feature_sets = self.slurm_api.get_node_info()['features']
+        if not active_features.issuperset(selected_features):
+            raise Exception('Some of the features selected are not available in any node.')
+
+        unselect = set()
+        for feature_set in feature_sets:
+            if feature_set.issuperset(selected_features):
+                return
+            unselect.add(frozenset(selected_features.difference(feature_set)))
+
+        # No node can satisfy all selected features; report a single clear error
+        feature_list = ", ".join(sorted(selected_features))
+        unselect_list = ", ".join(["[%s]" % ", ".join(sorted(combo)) for combo in sorted(unselect)])
+        message = (
+            f'The selected feature combination [{feature_list}] cannot be satisfied by any single node. '
+            f'Unselect one of the following set of features: {unselect_list}.'
+        )
+        raise Exception(message)
 
     def config_reservations(self):
         choices = self.resolve(self.reservation.get('choices'))
