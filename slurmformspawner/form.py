@@ -450,7 +450,8 @@ class SbatchForm(Configurable):
         self.form['reservation'].choices = [("", "None")]
         for rsv in choices:
             name = rsv['ReservationName']
-            duration = rsv['EndTime'] - now
+            # Compute the duration left to the reservation and remove the milliseconds
+            duration = str(rsv['EndTime'] - now).split('.')[0]
             string = '{} - time left: {}'.format(name, duration)
             self.form['reservation'].choices.append((name, string))
         if lock:

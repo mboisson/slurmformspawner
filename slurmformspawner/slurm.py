@@ -91,8 +91,8 @@ class SlurmAPI(SingletonConfigurable):
             current_res['ReservationName'] = res['name']
             current_res['Users'] = set(res['users'].split(','))
             current_res['Accounts'] = set(res['accounts'].split(','))
-            current_res['StartTime'] = datetime.fromtimestamp(res['start_time'])
-            current_res['EndTime'] = datetime.fromtimestamp(res['end_time'])
+            current_res['StartTime'] = datetime.fromtimestamp(res['start_time']['number'])
+            current_res['EndTime'] = datetime.fromtimestamp(res['end_time']['number'])
             filtered_reservations.append(current_res)
         return filtered_reservations
 
