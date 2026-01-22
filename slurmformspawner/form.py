@@ -24,7 +24,7 @@ def select_multi_checkbox(field, **kwargs):
     kwargs.setdefault('type', 'checkbox')
     field_id = kwargs.pop('id', field.id)
     html = []
-    for value, label, checked in field.iter_choices():
+    for value, label, checked, _ in field.iter_choices():
         choice_id = f"{field_id}-{value}"
         options = dict(kwargs, name=field.name, value=value, id=choice_id)
         if checked:
