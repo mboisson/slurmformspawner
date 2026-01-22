@@ -14,9 +14,9 @@ from traitlets import Unicode
 from wtforms import BooleanField, DecimalField, SelectField, SelectMultipleField
 from wtforms.form import BaseForm
 from wtforms.validators import InputRequired, NumberRange, AnyOf
-from wtforms.fields.html5 import IntegerField
+from wtforms import IntegerField
 from wtforms.widgets import html_params
-from wtforms.widgets.html5 import NumberInput
+from wtforms.widgets import NumberInput
 
 from .traitlets import NumericRangeWidget, SelectWidget, LockableWidget
 
@@ -24,7 +24,7 @@ def select_multi_checkbox(field, **kwargs):
     kwargs.setdefault('type', 'checkbox')
     field_id = kwargs.pop('id', field.id)
     html = []
-    for value, label, checked in field.iter_choices():
+    for value, label, checked, _ in field.iter_choices():
         choice_id = f"{field_id}-{value}"
         options = dict(kwargs, name=field.name, value=value, id=choice_id)
         if checked:
