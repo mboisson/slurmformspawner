@@ -1,3 +1,5 @@
+import json
+
 from operator import attrgetter
 from traitlets.config import SingletonConfigurable
 from traitlets import Integer
@@ -23,25 +25,19 @@ class SlurmAPI(SingletonConfigurable):
     def get_node_info(self):
         output = {'cpu': [], 'mem': [], 'gres': [], 'partitions': [], 'features': set()}
         try:
-            controls = check_output(['scontrol', '-o', 'show', 'node'], encoding='utf-8')
+            controls = check_output(['scontrol', '--json', 'show', 'node'], encoding='utf-8')
         except CalledProcessError:
             return output
         else:
-            nodes = [
-                dict([
-                    item.split('=', 1) for item in line.split(' ') if '=' in item
-                ])
-                for line in controls.split("\n") if line
-            ]
+            nodes = json.loads(controls).get('nodes', [])
             for node in nodes:
-                output['cpu'].append(int(node['CPUTot']))
-                output['mem'].append(int(node['RealMemory']) - int(node.get('MemSpecLimit', '0')))
-                output['gres'].extend([node['Gres']])
-                if 'Partitions' in node and node['Partitions']:
-                    output['partitions'].extend(node['Partitions'].split(","))
-                if 'ActiveFeatures' in node and node['ActiveFeatures']:
-                    output['features'].add(frozenset(node['ActiveFeatures'].split(",")))
-            output['features'].discard(frozenset(['(null)']))
+                output['cpu'].append(node['cpus'])
+                output['mem'].append(node['real_memory'] - node.get('specialized_memory', 0))
+                if node['gres']:
+                    output['gres'].append(node['gres'])
+                output['partitions'].extend(node.get('partitions', []))
+                if node.get('active_features', []):
+                    output['features'].add(frozenset(node['active_features']))
         return output
 
     def is_online(self):
@@ -56,9 +52,7 @@ class SlurmAPI(SingletonConfigurable):
         return sorted(mems)
 
     def get_gres(self):
-        gres = set(self.get_node_info()['gres'])
-        if '(null)' in gres:
-            gres.remove('(null)')
+        gres = set(self.get_node_info()['gres']) - set(['gpu:0'])
         return ['gpu:0'] + sorted(gres)
 
     def get_partitions(self):
@@ -82,22 +76,25 @@ class SlurmAPI(SingletonConfigurable):
     @cachedmethod(attrgetter('res_cache'))
     def get_reservations(self):
         try:
-            reservations = check_output(['scontrol', 'show', 'res', '-o', '--quiet'], encoding='utf-8')
+            reservations = check_output(['scontrol', 'show', 'res', '--json'], encoding='utf-8')
         except CalledProcessError:
             reservations = []
         else:
-            if reservations:
-                reservations = reservations.strip().split('\n')
-            else:
-                reservations = []
+            reservations = json.loads(reservations).get('reservations', [])
 
-        reservations = [dict([item.split('=', maxsplit=1) for item in res.split()]) for res in reservations if res]
+        filtered_reservations = []
         for res in reservations:
-            res['Users'] = set(res['Users'].split(','))
-            res['Accounts'] = set(res['Accounts'].split(','))
-            res['StartTime'] = datetime.strptime(res['StartTime'], "%Y-%m-%dT%H:%M:%S")
-            res['EndTime'] = datetime.strptime(res['EndTime'], "%Y-%m-%dT%H:%M:%S")
-        return reservations
+            flags = set(res['flags'])
+            if 'MAINT' in flags:
+                continue
+            current_res = {}
+            current_res['ReservationName'] = res['name']
+            current_res['Users'] = set(res['users'].split(','))
+            current_res['Accounts'] = set(res['accounts'].split(','))
+            current_res['StartTime'] = datetime.fromtimestamp(res['start_time'])
+            current_res['EndTime'] = datetime.fromtimestamp(res['end_time'])
+            filtered_reservations.append(current_res)
+        return filtered_reservations
 
     def get_active_reservations(self, username, accounts):
         reservations = self.get_reservations()
