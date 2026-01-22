@@ -14,9 +14,9 @@ from traitlets import Unicode
 from wtforms import BooleanField, DecimalField, SelectField, SelectMultipleField
 from wtforms.form import BaseForm
 from wtforms.validators import InputRequired, NumberRange, AnyOf
-from wtforms.fields.html5 import IntegerField
+from wtforms import IntegerField
 from wtforms.widgets import html_params
-from wtforms.widgets.html5 import NumberInput
+from wtforms.widgets import NumberInput
 
 from .traitlets import NumericRangeWidget, SelectWidget, LockableWidget
 
